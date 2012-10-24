@@ -158,7 +158,6 @@
 #define   SDHCI_CTRL_UHS_SDR50		0x0002
 #define   SDHCI_CTRL_UHS_SDR104		0x0003
 #define   SDHCI_CTRL_UHS_DDR50		0x0004
-#define   SDHCI_CTRL_HS_SDR200		0x0005 /* reserved value in SDIO spec */
 #define  SDHCI_CTRL_VDD_180		0x0008
 #define  SDHCI_CTRL_DRV_TYPE_MASK	0x0030
 #define   SDHCI_CTRL_DRV_TYPE_B		0x0000
@@ -205,7 +204,6 @@
 #define SDHCI_CAPABILITIES_1	0x44
 
 #define SDHCI_MAX_CURRENT		0x48
-#define  SDHCI_MAX_CURRENT_LIMIT	0xFF
 #define  SDHCI_MAX_CURRENT_330_MASK	0x0000FF
 #define  SDHCI_MAX_CURRENT_330_SHIFT	0
 #define  SDHCI_MAX_CURRENT_300_MASK	0x00FF00
@@ -275,9 +273,26 @@ struct sdhci_ops {
 	void	(*platform_reset_enter)(struct sdhci_host *host, u8 mask);
 	void	(*platform_reset_exit)(struct sdhci_host *host, u8 mask);
 	int	(*set_uhs_signaling)(struct sdhci_host *host, unsigned int uhs);
+
+	int             (*enable)(struct sdhci_host *mmc);
+	int             (*disable)(struct sdhci_host *mmc, int lazy);
+	int             (*set_plat_power)(struct sdhci_host *mmc,
+					  int power_mode);
+
+	int             (*pdma_able)(struct sdhci_host *host,
+				     struct mmc_data *data);
+	void            (*pdma_avail)(struct sdhci_host *host,
+				      unsigned int *ref_intmask,
+				      void(*complete)(struct sdhci_host *));
+	void            (*pdma_reset)(struct sdhci_host *host,
+				      struct mmc_data *data);
+	unsigned int 	(*extra_ints)(struct sdhci_host *host);
+	unsigned int	(*spurious_crc_acmd51)(struct sdhci_host *host);
+	unsigned int	(*voltage_broken)(struct sdhci_host *host);
+	unsigned int	(*uhs_broken)(struct sdhci_host *host);
+	unsigned int	(*missing_status)(struct sdhci_host *host);
+
 	void	(*hw_reset)(struct sdhci_host *host);
-	void	(*platform_suspend)(struct sdhci_host *host);
-	void	(*platform_resume)(struct sdhci_host *host);
 };
 
 #ifdef CONFIG_MMC_SDHCI_IO_ACCESSORS
@@ -383,6 +398,29 @@ extern int sdhci_resume_host(struct sdhci_host *host);
 extern void sdhci_enable_irq_wakeups(struct sdhci_host *host);
 #endif
 
+static inline int /*bool*/
+sdhci_platdma_dmaable(struct sdhci_host *host, struct mmc_data *data)
+{
+	if (host->ops->pdma_able)
+		return host->ops->pdma_able(host, data);
+	else
+		return 1;
+}
+static inline void
+sdhci_platdma_avail(struct sdhci_host *host, unsigned int *ref_intmask,
+		void(*completion_callback)(struct sdhci_host *))
+{
+	if (host->ops->pdma_avail)
+		host->ops->pdma_avail(host, ref_intmask, completion_callback);
+}
+
+static inline void
+sdhci_platdma_reset(struct sdhci_host *host, struct mmc_data *data)
+{
+	if (host->ops->pdma_reset)
+		host->ops->pdma_reset(host, data);
+}
+   
 #ifdef CONFIG_PM_RUNTIME
 extern int sdhci_runtime_suspend_host(struct sdhci_host *host);
 extern int sdhci_runtime_resume_host(struct sdhci_host *host);
